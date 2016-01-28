@@ -22,7 +22,7 @@ script:
   - rm $TAG.zip
   - export arduino_dir=Arduino-$TAG
   - pushd $arduino_dir/build
-  - echo "" | ant build
+  - echo " " | ant build
   - pushd shared/tools
   - mkdir -p EspExceptionDecoder
   - rsync -a $SRC/ EspExceptionDecoder/
