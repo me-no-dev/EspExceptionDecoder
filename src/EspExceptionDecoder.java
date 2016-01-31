@@ -150,20 +150,26 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
       editor.statusError("Not Supported on "+PreferencesData.get("target_platform"));
       return;
     }
+    
     String tc = "esp108";
     if(PreferencesData.get("target_platform").contentEquals("esp8266")){
       tc = "lx106";
     }
-
+    
     TargetPlatform platform = BaseNoGui.getTargetPlatform();
-
+    
+    String gccPath = PreferencesData.get("runtime.tools.xtensa-"+tc+"-elf-gcc.path");
+    if(gccPath == null){
+      gccPath = platform.getFolder() + "/tools/xtensa-"+tc+"-elf";
+    }
+    
     String addr2line;
     if(PreferencesData.get("runtime.os").contentEquals("windows"))
       addr2line = "xtensa-"+tc+"-elf-addr2line.exe";
     else
       addr2line = "xtensa-"+tc+"-elf-addr2line";
 
-    tool = new File(platform.getFolder() + "/tools/xtensa-"+tc+"-elf/bin", addr2line);
+    tool = new File(gccPath + "/bin", addr2line);
     if (!tool.exists() || !tool.isFile()) {
       System.err.println();
       editor.statusError("ERROR: "+addr2line+" not found!");
@@ -172,8 +178,8 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
 
     elf = new File(getBuildFolderPath(editor.getSketch()), editor.getSketch().getName() + ".ino.elf");
     if (!elf.exists() || !elf.isFile()) {
-      System.err.println();
       editor.statusError("ERROR: "+editor.getSketch().getName() + ".ino.elf not found!");
+      System.err.println("Did you forget to compile the sketch?");
       return;
     }
 
@@ -190,7 +196,6 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
     frame.getContentPane().add(new JScrollPane(inputArea), BorderLayout.PAGE_START);
 
     outputArea = new JTextArea(16, 60);
-    //outputArea.setFont(new Font("Verdana", Font.BOLD, 12));
     outputArea.setLineWrap(true);
     outputArea.setWrapStyleWord(true);
     outputArea.setEditable(false);
