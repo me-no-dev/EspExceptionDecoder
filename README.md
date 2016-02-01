@@ -17,7 +17,7 @@ Arduino plugin which lets you get a more meaningful explanation of the stack tra
 - Paste the stack trace into the window's top pane and the result will show in the bottom.
 - Every time you enter new address or stack trace, the results will refresh
 
-[EspExceptionDecoder.png](EspExceptionDecoder.png)
+![EspExceptionDecoder.png](EspExceptionDecoder.png)
 
 ## Credits and license
 
