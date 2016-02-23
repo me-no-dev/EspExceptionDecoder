@@ -47,7 +47,7 @@ import processing.app.tools.Tool;
 
 public class EspExceptionDecoder implements Tool, DocumentListener {
   Editor editor;
-  JTextArea outputArea;
+  JLabel outputArea;
   JTextArea inputArea;
   JFrame frame;
   File tool;
@@ -70,8 +70,18 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
           try {
             InputStreamReader reader = new InputStreamReader(p.getInputStream());
             int c;
-            while ((c = reader.read()) != -1)
-              outputArea.append(""+((char) c));
+            String line = "";
+            while ((c = reader.read()) != -1){
+              if((char)c == '\r')
+                continue;
+              if((char)c == '\n'){
+                printLine(line);
+                line = "";
+              } else {
+                line += (char)c;
+              }
+            }
+            printLine(line);
             reader.close();
 
             reader = new InputStreamReader(p.getErrorStream());
@@ -198,14 +208,46 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
     inputArea.getDocument().addDocumentListener(this);
     frame.getContentPane().add(new JScrollPane(inputArea), BorderLayout.PAGE_START);
 
-    outputArea = new JTextArea(16, 60);
-    outputArea.setLineWrap(true);
-    outputArea.setWrapStyleWord(true);
-    outputArea.setEditable(false);
-    frame.getContentPane().add(new JScrollPane(outputArea), BorderLayout.CENTER);
-
+    outputArea = new JLabel();
+    JScrollPane outputScrollPane = new JScrollPane(outputArea);
+    outputScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
+    outputScrollPane.setPreferredSize(new Dimension(640, 200));
+    outputScrollPane.setMinimumSize(new Dimension(10, 10));
+    frame.getContentPane().add(outputScrollPane, BorderLayout.CENTER);
+    
     frame.pack();
     frame.setVisible(true);
+  }
+
+  private void printLine(String line){
+    String address = "", method = "", file = "";
+    if(line.startsWith("0x")){
+      address = line.substring(0, line.indexOf(':'));
+      line = line.substring(line.indexOf(':') + 2);
+    } else if(line.startsWith("(inlined by)")){
+      line = line.substring(13);
+      address = "inlined by";
+    }
+    int atIndex = line.indexOf(" at ");
+    if(atIndex == -1)
+      return;
+    method = line.substring(0, atIndex);
+    line = line.substring(atIndex + 4);
+    file = line.substring(0, line.lastIndexOf(':'));
+    if(file.length() > 0){
+      int lastfs = file.lastIndexOf('/');
+      int lastbs = file.lastIndexOf('\\');
+      int slash = (lastfs > lastbs)?lastfs:lastbs;
+      if(slash != -1){
+        String filename = file.substring(slash+1);
+        file = file.substring(0,slash+1) + "<b>" + filename + "</b>";
+      }
+    }
+    line = line.substring(line.lastIndexOf(':') + 1);
+    String html = "" +
+      "<font color=green>" + address + ": </font>" +
+      "<b><font color=blue>" + method + "</font></b> at " + file + " line <b>" + line + "</b>";
+    outputArea.setText(outputArea.getText() + html +"<br>");
   }
 
   public void run() {
@@ -233,7 +275,7 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
     while(m.find()) {
       command[i++] = content.substring(m.start(), m.end());
     }
-    outputArea.setText("Decoding "+count+" results\n");
+    outputArea.setText("<html><i>Decoding "+count+" results</i><br>");
     sysExec(command);
   }
 
