@@ -47,7 +47,8 @@ import processing.app.tools.Tool;
 
 public class EspExceptionDecoder implements Tool, DocumentListener {
   Editor editor;
-  JLabel outputArea;
+  JTextPane outputArea;
+  String outputText;
   JTextArea inputArea;
   JFrame frame;
   File tool;
@@ -105,11 +106,14 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
         try {
           if(listenOnProcess(arguments) != 0){
             editor.statusError("Decode Failed");
+            outputArea.setText("<html><font color=red>Decode Failed</font></html>");
           } else {
             editor.statusNotice("Decode Success");
+            outputArea.setText(outputText);
           }
         } catch (Exception e){
           editor.statusError("Decode Exception");
+          outputArea.setText("<html><font color=red><b>Decode Exception:</b> "+e.getMessage()+"</font></html>");
         }
       }
     };
@@ -207,8 +211,16 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
     inputArea.getActionMap().put("commit", new CommitAction());
     inputArea.getDocument().addDocumentListener(this);
     frame.getContentPane().add(new JScrollPane(inputArea), BorderLayout.PAGE_START);
-
-    outputArea = new JLabel();
+    
+    outputText = "";
+    outputArea = new JTextPane();
+    outputArea.setContentType("text/html");
+    outputArea.setEditable(false);
+    outputArea.setBackground(null);
+    outputArea.setBorder(null);
+    outputArea.putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, true);
+    outputArea.setText(outputText);
+    
     JScrollPane outputScrollPane = new JScrollPane(outputArea);
     outputScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
     outputScrollPane.setPreferredSize(new Dimension(640, 200));
@@ -247,7 +259,7 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
     String html = "" +
       "<font color=green>" + address + ": </font>" +
       "<b><font color=blue>" + method + "</font></b> at " + file + " line <b>" + line + "</b>";
-    outputArea.setText(outputArea.getText() + html +"<br>");
+    outputText += html +"\n";
   }
 
   public void run() {
@@ -275,7 +287,7 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
     while(m.find()) {
       command[i++] = content.substring(m.start(), m.end());
     }
-    outputArea.setText("<html><i>Decoding "+count+" results</i><br>");
+    outputText = "<html><pre><i>Decoding "+count+" results</i>\n";
     sysExec(command);
   }
 
@@ -296,5 +308,4 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
   public void insertUpdate(DocumentEvent ev) {
     parseText();
   }
-
 }
