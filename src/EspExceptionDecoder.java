@@ -39,7 +39,7 @@ import processing.app.Editor;
 import processing.app.Platform;
 import processing.app.PreferencesData;
 import processing.app.Sketch;
-import processing.app.SketchData;
+//import processing.app.SketchData;
 import processing.app.debug.TargetPlatform;
 import processing.app.helpers.FileUtils;
 import processing.app.helpers.ProcessUtils;
@@ -121,32 +121,43 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
   }
 
   private String getBuildFolderPath(Sketch s) {
-    try {
-      File buildFolder = FileUtils.createTempFolder("build", DigestUtils.md5Hex(s.getMainFilePath()) + ".tmp");
-      //DeleteFilesOnShutdown.add(buildFolder);
-      return buildFolder.getAbsolutePath();
-    }
-    catch (IOException e) {
-      editor.statusError(e);
-    }
-    catch (NoSuchMethodError e) {
-      // Arduino 1.6.5 doesn't have FileUtils.createTempFolder
-      // String buildPath = BaseNoGui.getBuildFolder().getAbsolutePath();
-      java.lang.reflect.Method method;
-      try {
-        method = BaseNoGui.class.getMethod("getBuildFolder");
-        File f = (File) method.invoke(null);
-        return f.getAbsolutePath();
-      } catch (SecurityException ex) {
-        editor.statusError(ex);
-      } catch (IllegalAccessException ex) {
-        editor.statusError(ex);
-      } catch (InvocationTargetException ex) {
-        editor.statusError(ex);
-      } catch (NoSuchMethodException ex) {
-        editor.statusError(ex);
-      }
-    }
+	// first of all try the getBuildPath() function introduced with IDE 1.6.12
+	// see commit arduino/Arduino#fd1541eb47d589f9b9ea7e558018a8cf49bb6d03
+	try {
+		String buildpath = s.getBuildPath().getAbsolutePath();
+		return buildpath;
+	}
+	catch (IOException er) {
+	     editor.statusError(er);
+	}
+	catch (NoSuchMethodError er) {
+		try {
+	      File buildFolder = FileUtils.createTempFolder("build", DigestUtils.md5Hex(s.getMainFilePath()) + ".tmp");
+	      //DeleteFilesOnShutdown.add(buildFolder);
+	      return buildFolder.getAbsolutePath();
+	    }
+	    catch (IOException e) {
+	      editor.statusError(e);
+	    }
+	    catch (NoSuchMethodError e) {
+	      // Arduino 1.6.5 doesn't have FileUtils.createTempFolder
+	      // String buildPath = BaseNoGui.getBuildFolder().getAbsolutePath();
+	      java.lang.reflect.Method method;
+	      try {
+	        method = BaseNoGui.class.getMethod("getBuildFolder");
+	        File f = (File) method.invoke(null);
+	        return f.getAbsolutePath();
+	      } catch (SecurityException ex) {
+	        editor.statusError(ex);
+	      } catch (IllegalAccessException ex) {
+	        editor.statusError(ex);
+	      } catch (InvocationTargetException ex) {
+	        editor.statusError(ex);
+	      } catch (NoSuchMethodException ex) {
+	        editor.statusError(ex);
+	      }
+	    }
+	}
     return "";
   }
 
