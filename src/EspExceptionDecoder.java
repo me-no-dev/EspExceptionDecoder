@@ -130,7 +130,7 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
 	catch (IOException er) {
 	     editor.statusError(er);
 	}
-	catch (NoSuchMethodError er) {
+	catch (Exception er) {
 		try {
 	      File buildFolder = FileUtils.createTempFolder("build", DigestUtils.md5Hex(s.getMainFilePath()) + ".tmp");
 	      //DeleteFilesOnShutdown.add(buildFolder);
@@ -139,7 +139,7 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
 	    catch (IOException e) {
 	      editor.statusError(e);
 	    }
-	    catch (NoSuchMethodError e) {
+	    catch (Exception e) {
 	      // Arduino 1.6.5 doesn't have FileUtils.createTempFolder
 	      // String buildPath = BaseNoGui.getBuildFolder().getAbsolutePath();
 	      java.lang.reflect.Method method;
