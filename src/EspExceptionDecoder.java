@@ -30,6 +30,7 @@ import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.regex.*;
 import javax.swing.*;
+import javax.swing.filechooser.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import org.apache.commons.codec.digest.DigestUtils;
@@ -121,43 +122,43 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
   }
 
   private String getBuildFolderPath(Sketch s) {
-	// first of all try the getBuildPath() function introduced with IDE 1.6.12
-	// see commit arduino/Arduino#fd1541eb47d589f9b9ea7e558018a8cf49bb6d03
-	try {
-		String buildpath = s.getBuildPath().getAbsolutePath();
-		return buildpath;
-	}
-	catch (IOException er) {
-	     editor.statusError(er);
-	}
-	catch (Exception er) {
-		try {
-	      File buildFolder = FileUtils.createTempFolder("build", DigestUtils.md5Hex(s.getMainFilePath()) + ".tmp");
-	      //DeleteFilesOnShutdown.add(buildFolder);
-	      return buildFolder.getAbsolutePath();
-	    }
-	    catch (IOException e) {
-	      editor.statusError(e);
-	    }
-	    catch (Exception e) {
-	      // Arduino 1.6.5 doesn't have FileUtils.createTempFolder
-	      // String buildPath = BaseNoGui.getBuildFolder().getAbsolutePath();
-	      java.lang.reflect.Method method;
-	      try {
-	        method = BaseNoGui.class.getMethod("getBuildFolder");
-	        File f = (File) method.invoke(null);
-	        return f.getAbsolutePath();
-	      } catch (SecurityException ex) {
-	        editor.statusError(ex);
-	      } catch (IllegalAccessException ex) {
-	        editor.statusError(ex);
-	      } catch (InvocationTargetException ex) {
-	        editor.statusError(ex);
-	      } catch (NoSuchMethodException ex) {
-	        editor.statusError(ex);
-	      }
-	    }
-	}
+  // first of all try the getBuildPath() function introduced with IDE 1.6.12
+  // see commit arduino/Arduino#fd1541eb47d589f9b9ea7e558018a8cf49bb6d03
+  try {
+    String buildpath = s.getBuildPath().getAbsolutePath();
+    return buildpath;
+  }
+  catch (IOException er) {
+       editor.statusError(er);
+  }
+  catch (Exception er) {
+    try {
+        File buildFolder = FileUtils.createTempFolder("build", DigestUtils.md5Hex(s.getMainFilePath()) + ".tmp");
+        //DeleteFilesOnShutdown.add(buildFolder);
+        return buildFolder.getAbsolutePath();
+      }
+      catch (IOException e) {
+        editor.statusError(e);
+      }
+      catch (Exception e) {
+        // Arduino 1.6.5 doesn't have FileUtils.createTempFolder
+        // String buildPath = BaseNoGui.getBuildFolder().getAbsolutePath();
+        java.lang.reflect.Method method;
+        try {
+          method = BaseNoGui.class.getMethod("getBuildFolder");
+          File f = (File) method.invoke(null);
+          return f.getAbsolutePath();
+        } catch (SecurityException ex) {
+          editor.statusError(ex);
+        } catch (IllegalAccessException ex) {
+          editor.statusError(ex);
+        } catch (InvocationTargetException ex) {
+          editor.statusError(ex);
+        } catch (NoSuchMethodException ex) {
+          editor.statusError(ex);
+        }
+      }
+  }
     return "";
   }
 
@@ -169,14 +170,39 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
     else return Integer.parseInt(data);
   }
 
+  class ElfFilter extends FileFilter {
+    public String getExtension(File f) {
+        String ext = null;
+        String s = f.getName();
+        int i = s.lastIndexOf('.');
+        if (i > 0 &&  i < s.length() - 1) {
+            ext = s.substring(i+1).toLowerCase();
+        }
+        return ext;
+    }
+    public boolean accept(File f) {
+        if (f.isDirectory()) {
+            return true;
+        }
+        String extension = getExtension(f);
+        if (extension != null) {
+            return extension.equals("elf");
+        }
+        return false;
+    }
+    public String getDescription() {
+        return "*.elf files";
+    }
+  }
+
   private void createAndUpload(){
-    if(!PreferencesData.get("target_platform").contentEquals("esp8266") && !PreferencesData.get("target_platform").contentEquals("esp31b") && !PreferencesData.get("target_platform").contentEquals("ESP31B")){
+    if(!PreferencesData.get("target_platform").contentEquals("esp8266") && !PreferencesData.get("target_platform").contentEquals("esp32") && !PreferencesData.get("target_platform").contentEquals("ESP31B")){
       System.err.println();
       editor.statusError("Not Supported on "+PreferencesData.get("target_platform"));
       return;
     }
 
-    String tc = "esp108";
+    String tc = "esp32";
     if(PreferencesData.get("target_platform").contentEquals("esp8266")){
       tc = "lx106";
     }
@@ -205,9 +231,18 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
     if (!elf.exists() || !elf.isFile()) {
       elf = new File(getBuildFolderPath(editor.getSketch()), editor.getSketch().getName() + ".cpp.elf");
       if (!elf.exists() || !elf.isFile()){
-        editor.statusError("ERROR: neither "+editor.getSketch().getName() + ".ino.elf or "+editor.getSketch().getName() + ".cpp.elf were found!");
-        System.err.println("Did you forget to compile the sketch?");
-        return;
+        //lets give the user a chance to select the elf
+        final JFileChooser fc = new JFileChooser();
+        fc.addChoosableFileFilter(new ElfFilter());
+        fc.setAcceptAllFileFilterUsed(false);
+        int returnVal = fc.showDialog(editor, "Select ELF");
+        if (returnVal == JFileChooser.APPROVE_OPTION) {
+          elf = fc.getSelectedFile();
+        } else {
+          editor.statusError("ERROR: elf was not found!");
+          System.err.println("Open command cancelled by user.");
+          return;
+        }
       }
     }
 
