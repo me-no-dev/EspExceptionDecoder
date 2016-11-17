@@ -16,7 +16,7 @@ jdk:
 script:
   - export SRC=$PWD
   - cd $HOME
-  - export TAG=1.6.6
+  - export TAG=1.6.12
   - wget https://github.com/arduino/Arduino/archive/$TAG.zip
   - unzip $TAG.zip
   - rm $TAG.zip
