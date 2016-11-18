@@ -19,6 +19,9 @@ Arduino plugin which lets you get a more meaningful explanation of the stack tra
 
 ![EspExceptionDecoder.png](EspExceptionDecoder.png)
 
+## Gedit Highlighting
+You can use the *StackTrace* utility to have gedit highlight the above stack trace for easy viewing. More details can be found here: https://github.com/electronicsguy/ESP8266/tree/master/Misc/StackTrace
+
 ## Credits and license
 
 - Copyright (c) 2015 Hristo Gochkov (ficeto at ficeto dot com)
