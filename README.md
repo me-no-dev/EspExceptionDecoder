@@ -26,3 +26,6 @@ You can use the *StackTrace* utility to have gedit highlight the above stack tra
 
 - Copyright (c) 2015 Hristo Gochkov (ficeto at ficeto dot com)
 - Licensed under GPL v2 ([text](LICENSE))
+
+## Command line version
+If you are searching for a command line version, look at [EspStackTraceDecoder] (https://github.com/littleyoda/EspStackTraceDecoder). EspStackTraceDecoder is based on the EspExceptionDecoder, but was completely rewritten for the command line usage.
