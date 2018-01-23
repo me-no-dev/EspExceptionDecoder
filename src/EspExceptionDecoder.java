@@ -43,6 +43,7 @@ import processing.app.Sketch;
 //import processing.app.SketchData;
 import processing.app.debug.TargetPlatform;
 import processing.app.helpers.FileUtils;
+import processing.app.helpers.OSUtils;
 import processing.app.helpers.ProcessUtils;
 import processing.app.tools.Tool;
 
@@ -96,9 +97,35 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
     return "ESP Exception Decoder";
   }
 
+  // Original code from processing.app.helpers.ProcessUtils.exec()
+  // Need custom version to redirect STDERR to STDOUT for GDB processing
+  public static Process execRedirected(String[] command) throws IOException {
+    ProcessBuilder pb;
+
+    // No problems on linux and mac
+    if (!OSUtils.isWindows()) {
+      pb = new ProcessBuilder(command);
+    } else {
+      // Brutal hack to workaround windows command line parsing.
+      // http://stackoverflow.com/questions/5969724/java-runtime-exec-fails-to-escape-characters-properly
+      // http://msdn.microsoft.com/en-us/library/a1y7w461.aspx
+      // http://bugs.sun.com/view_bug.do?bug_id=6468220
+      // http://bugs.sun.com/view_bug.do?bug_id=6518827
+      String[] cmdLine = new String[command.length];
+      for (int i = 0; i < command.length; i++)
+        cmdLine[i] = command[i].replace("\"", "\\\"");
+      pb = new ProcessBuilder(cmdLine);
+      Map<String, String> env = pb.environment();
+      env.put("CYGWIN", "nodosfilewarning");
+    }
+    pb.redirectErrorStream(true);
+
+    return pb.start();
+  }
+
   private int listenOnProcess(String[] arguments){
     try {
-      final Process p = ProcessUtils.exec(arguments);
+      final Process p = execRedirected(arguments);
       Thread thread = new Thread() {
         public void run() {
           try {
@@ -246,16 +273,16 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
       gccPath = platform.getFolder() + "/tools/xtensa-"+tc+"-elf";
     }
 
-    String addr2line;
+    String gdb;
     if(PreferencesData.get("runtime.os").contentEquals("windows"))
-      addr2line = "xtensa-"+tc+"-elf-addr2line.exe";
+      gdb = "xtensa-"+tc+"-elf-gdb.exe";
     else
-      addr2line = "xtensa-"+tc+"-elf-addr2line";
+      gdb = "xtensa-"+tc+"-elf-gdb";
 
-    tool = new File(gccPath + "/bin", addr2line);
+    tool = new File(gccPath + "/bin", gdb);
     if (!tool.exists() || !tool.isFile()) {
       System.err.println();
-      editor.statusError("ERROR: "+addr2line+" not found!");
+      editor.statusError("ERROR: "+gdb+" not found!");
       return;
     }
 
@@ -309,35 +336,49 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
     frame.setVisible(true);
   }
 
+  private String prettyPrintGDBLine(String line) {
+    String address = "", method = "", file = "", fileline = "", html = "";
+
+    if (!line.startsWith("0x")) {
+      return null;
+    }
+  
+    address = line.substring(0, line.indexOf(' '));
+    line = line.substring(line.indexOf(' ') + 1);
+
+    int atIndex = line.indexOf("is in ");
+    if(atIndex == -1) {
+      return null;
+    }
+    try {
+        method = line.substring(atIndex + 6, line.lastIndexOf('(') - 1);
+        fileline = line.substring(line.lastIndexOf('(') + 1, line.lastIndexOf(')'));
+        file = fileline.substring(0, fileline.lastIndexOf(':'));
+        line = fileline.substring(fileline.lastIndexOf(':') + 1);
+        if(file.length() > 0){
+          int lastfs = file.lastIndexOf('/');
+          int lastbs = file.lastIndexOf('\\');
+          int slash = (lastfs > lastbs)?lastfs:lastbs;
+          if(slash != -1){
+            String filename = file.substring(slash+1);
+            file = file.substring(0,slash+1) + "<b>" + filename + "</b>";
+          }
+        }
+        html = "<font color=green>" + address + ": </font>" +
+               "<b><font color=blue>" + method + "</font></b> at " +
+               file + " line <b>" + line + "</b>";
+    } catch (Exception e) {
+        // Something weird in the GDB output format, report what we can
+        html = "<font color=green>" + address + ": </font> " + line;
+    }
+
+    return html;
+  }
+
   private void printLine(String line){
-    String address = "", method = "", file = "";
-    if(line.startsWith("0x")){
-      address = line.substring(0, line.indexOf(':'));
-      line = line.substring(line.indexOf(':') + 2);
-    } else if(line.startsWith("(inlined by)")){
-      line = line.substring(13);
-      address = "inlined by";
-    }
-    int atIndex = line.indexOf(" at ");
-    if(atIndex == -1)
-      return;
-    method = line.substring(0, atIndex);
-    line = line.substring(atIndex + 4);
-    file = line.substring(0, line.lastIndexOf(':'));
-    if(file.length() > 0){
-      int lastfs = file.lastIndexOf('/');
-      int lastbs = file.lastIndexOf('\\');
-      int slash = (lastfs > lastbs)?lastfs:lastbs;
-      if(slash != -1){
-        String filename = file.substring(slash+1);
-        file = file.substring(0,slash+1) + "<b>" + filename + "</b>";
-      }
-    }
-    line = line.substring(line.lastIndexOf(':') + 1);
-    String html = "" +
-      "<font color=green>" + address + ": </font>" +
-      "<b><font color=blue>" + method + "</font></b> at " + file + " line <b>" + line + "</b>";
-    outputText += html +"\n";
+    String s = prettyPrintGDBLine(line);
+    if (s != null) 
+      outputText += s +"\n";
   }
 
   public void run() {
@@ -357,9 +398,31 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
     }
   }
 
-  private void parseText(){
+  // Strip out just the STACK lines or BACKTRACE line, and generate the reference log
+  private void parseStackOrBacktrace(String regexp, boolean multiLine, String stripAfter) {
     String content = inputArea.getText();
-    Pattern p = Pattern.compile("40[0-2](\\d|[a-f]){5}\\b");
+
+    Pattern strip;
+    if (multiLine) strip = Pattern.compile(regexp, Pattern.DOTALL);
+    else strip = Pattern.compile(regexp);
+    Matcher stripMatch = strip.matcher(content);
+    if (!stripMatch.find()) {
+      return; // Didn't find it in the text box.
+    }
+
+    // Strip out just the interesting bits to make RexExp sane
+    content = content.substring(stripMatch.start(), stripMatch.end());
+
+    if (stripAfter != null) {
+      Pattern after = Pattern.compile(stripAfter);
+      Matcher afterMatch = after.matcher(content);
+      if (afterMatch.find()) {
+          content = content.substring(0, afterMatch.start());
+      }
+    }
+
+    // Anything looking like an instruction address, dump!
+    Pattern p = Pattern.compile("40[0-2](\\d|[a-f]|[A-F]){5}\\b");
     int count = 0;
     Matcher m = p.matcher(content);
     while(m.find()) {
@@ -368,69 +431,119 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
     if(count == 0){
       return;
     }
-    String command[] = new String[4+count];
+    String command[] = new String[7 + count*2];
     int i = 0;
     command[i++] = tool.getAbsolutePath();
-    command[i++] = "-aipfC";
-    command[i++] = "-e";
+    command[i++] = "--batch";
     command[i++] = elf.getAbsolutePath();
+    command[i++] = "-ex";
+    command[i++] = "set listsize 1";
     m = p.matcher(content);
     while(m.find()) {
-      command[i++] = content.substring(m.start(), m.end());
+      command[i++] = "-ex";
+      command[i++] = "l *0x"+content.substring(m.start(), m.end());
     }
-    outputText += "<i>Decoding "+count+" results</i>\n";
+    command[i++] = "-ex";
+    command[i++] = "q";
+    outputText += "\n<i>Decoding stack results</i>\n";
     sysExec(command);
   }
 
+  // Heavyweight call GDB, run list on address, and return result if it succeeded
+  private String decodeFunctionAtAddress( String addr ) {
+    String command[] = new String[9];
+    command[0] = tool.getAbsolutePath();
+    command[1] = "--batch";
+    command[2] = elf.getAbsolutePath();
+    command[3] = "-ex";
+    command[4] = "set listsize 1";
+    command[5] = "-ex";
+    command[6] = "l *0x" + addr;
+    command[7] = "-ex";
+    command[8] = "q";
+
+    try {
+      final Process proc = execRedirected(command);
+      InputStreamReader reader = new InputStreamReader(proc.getInputStream());
+      int c;
+      String line = "";
+      while ((c = reader.read()) != -1){
+        if((char)c == '\r')
+          continue;
+        if((char)c == '\n' && line != ""){
+          reader.close();
+          return prettyPrintGDBLine(line);
+        } else {
+         line += (char)c;
+        }
+      }
+      reader.close();
+    } catch (Exception er) { }
+    // Something went wrong
+    return null;
+  }
+
+  // Scan and report the last failed memory allocation attempt, if present on the ESP8266
   private void parseAlloc() {
     String content = inputArea.getText();
-    Pattern p = Pattern.compile("last failed alloc call: 40[0-2](\\d|[-A-F]){5}\\((\\d)+\\)");
+    Pattern p = Pattern.compile("last failed alloc call: 40[0-2](\\d|[a-f]|[A-F]){5}\\((\\d)+\\)");
     Matcher m = p.matcher(content);
     if (m.find()) {
       String fs = content.substring(m.start(), m.end());
-      Pattern p2 = Pattern.compile("40[0-2](\\d|[A-F]){5}\\b");
+      Pattern p2 = Pattern.compile("40[0-2](\\d|[a-f]|[A-F]){5}\\b");
       Matcher m2 = p2.matcher(fs);
       if (m2.find()) {
-          String addr = fs.substring(m2.start(), m2.end());
-          Pattern p3 = Pattern.compile("\\((\\d)+\\)");
-          Matcher m3 = p3.matcher(fs);
-          if (m3.find()) {
-            String size = fs.substring(m3.start()+1, m3.end()-1);
-
-            String command[] = new String[5];
-            command[0] = tool.getAbsolutePath();
-            command[1] = "-aipfC";
-            command[2] = "-e";
-            command[3] = elf.getAbsolutePath();
-            command[4] = addr;
-      
-            try {
-              final Process proc = ProcessUtils.exec(command);
-              InputStreamReader reader = new InputStreamReader(proc.getInputStream());
-              int c;
-              String line = "";
-              while ((c = reader.read()) != -1){
-                if((char)c == '\r')
-                  continue;
-                if((char)c == '\n' && line != ""){
-                  outputText += "Memory allocation of " + size + " bytes failed at " + line + "\n";
-                  break;
-                } else {
-                 line += (char)c;
-                }
-              }
-              reader.close();
-            } catch (Exception er) { }
+        String addr = fs.substring(m2.start(), m2.end());
+        Pattern p3 = Pattern.compile("\\((\\d)+\\)");
+        Matcher m3 = p3.matcher(fs);
+        if (m3.find()) {
+          String size = fs.substring(m3.start()+1, m3.end()-1);
+          String line = decodeFunctionAtAddress(addr);
+          if (line != null) {
+            outputText += "Memory allocation of " + size + " bytes failed at " + line + "\n";
           }
+        }
+      }
+    }
+  }
+
+  // Filter out a register output given a regex (ESP8266/ESP32 differ in format)
+  private void parseRegister(String regName, String prettyName) {
+    String content = inputArea.getText();
+    Pattern p = Pattern.compile(regName + "(\\d|[a-f]|[A-F]){8}\\b");
+    Matcher m = p.matcher(content);
+    if (m.find()) {
+      String fs = content.substring(m.start(), m.end());
+      Pattern p2 = Pattern.compile("(\\d|[a-f]|[A-F]){8}\\b");
+      Matcher m2 = p2.matcher(fs);
+      if (m2.find()) {
+        String addr = fs.substring(m2.start(), m2.end());
+        String line = decodeFunctionAtAddress(addr);
+        if (line != null) {
+          outputText += prettyName + ": " + line + "\n";
+        } else {
+          outputText += prettyName + ": <font color=\"green\">0x" + addr + "</font>\n";
+        }
       }
     }
   }
 
   private void runParser(){
     outputText = "<html><pre>\n";
+    // Main error cause
     parseException();
+    // ESP8266 register format
+    parseRegister("epc1=0x", "<font color=\"red\">PC</font>");
+    parseRegister("excvaddr=0x", "<font color=\"red\">EXCVADDR</font>");
+    // ESP32 register format
+    parseRegister("PC\\s*:\\s*(0x)?", "<font color=\"red\">PC</font>");
+    parseRegister("EXCVADDR\\s*:\\s*(0x)?", "<font color=\"red\">EXCVADDR</font>");
+    // Last memory allocation failure
     parseAlloc();
-    parseText();
+    // The stack on ESP8266, multiline
+    parseStackOrBacktrace(">>>stack>>>(.)*", true, "<<<stack<<<");
+    // The backtrace on ESP32, one-line only
+    parseStackOrBacktrace("Backtrace:(.)*", false, null);
   }
 
   private class CommitAction extends AbstractAction {
