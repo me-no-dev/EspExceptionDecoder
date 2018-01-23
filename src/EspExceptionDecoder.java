@@ -382,9 +382,54 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
     sysExec(command);
   }
 
+  private void parseAlloc() {
+    String content = inputArea.getText();
+    Pattern p = Pattern.compile("last failed alloc call: 40[0-2](\\d|[-A-F]){5}\\((\\d)+\\)");
+    Matcher m = p.matcher(content);
+    if (m.find()) {
+      String fs = content.substring(m.start(), m.end());
+      Pattern p2 = Pattern.compile("40[0-2](\\d|[A-F]){5}\\b");
+      Matcher m2 = p2.matcher(fs);
+      if (m2.find()) {
+          String addr = fs.substring(m2.start(), m2.end());
+          Pattern p3 = Pattern.compile("\\((\\d)+\\)");
+          Matcher m3 = p3.matcher(fs);
+          if (m3.find()) {
+            String size = fs.substring(m3.start()+1, m3.end()-1);
+
+            String command[] = new String[5];
+            command[0] = tool.getAbsolutePath();
+            command[1] = "-aipfC";
+            command[2] = "-e";
+            command[3] = elf.getAbsolutePath();
+            command[4] = addr;
+      
+            try {
+              final Process proc = ProcessUtils.exec(command);
+              InputStreamReader reader = new InputStreamReader(proc.getInputStream());
+              int c;
+              String line = "";
+              while ((c = reader.read()) != -1){
+                if((char)c == '\r')
+                  continue;
+                if((char)c == '\n' && line != ""){
+                  outputText += "Memory allocation of " + size + " bytes failed at " + line + "\n";
+                  break;
+                } else {
+                 line += (char)c;
+                }
+              }
+              reader.close();
+            } catch (Exception er) { }
+          }
+      }
+    }
+  }
+
   private void runParser(){
     outputText = "<html><pre>\n";
     parseException();
+    parseAlloc();
     parseText();
   }
 
