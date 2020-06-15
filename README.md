@@ -8,6 +8,7 @@ Arduino plugin which lets you get a more meaningful explanation of the stack tra
 - Download the tool archive from [releases page](https://github.com/me-no-dev/EspExceptionDecoder/releases/latest).
 - In your Arduino sketchbook directory, create tools directory if it doesn't exist yet.
 - Unpack the tool into tools directory (the path will look like `<home_dir>/Arduino/tools/EspExceptionDecoder/tool/EspExceptionDecoder.jar)`.
+- On newer versions of linux (Ubuntu 20.04), you may need to install the libncurses5 and libpython2.7 packages: `sudo apt install libncurses5 libpython2.7`
 - Restart Arduino IDE.
 
 ## Usage
