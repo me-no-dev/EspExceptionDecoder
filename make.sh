@@ -21,7 +21,7 @@ echo "lib_path: $lib_path"
 set -e
 
 mkdir -p bin
-javac -target 1.8 -cp "$pde_path:$core_path:$lib_path" -d bin src/$PROJECT.java
+/Library/Java/JavaVirtualMachines/openlogic-openjdk-8.jdk/Contents/Home/bin/javac -target 1.8 -cp "$pde_path:$core_path:$lib_path" -d bin src/$PROJECT.java
 
 pushd bin
 mkdir -p $INSTALLDIR/tools

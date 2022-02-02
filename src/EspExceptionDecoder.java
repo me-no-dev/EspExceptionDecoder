@@ -261,23 +261,41 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
       return;
     }
 
-    String tc = "esp32";
-    if(PreferencesData.get("target_platform").contentEquals("esp8266")){
-      tc = "lx106";
+    String core = PreferencesData.get("target_platform");
+    String tarch = "xtensa";
+    String target = "lx106";
+
+    if(core.contentEquals("esp32")){
+      try {
+        tarch = BaseNoGui.getBoardPreferences().get("build.tarch");
+        if(tarch == null || tarch.contentEquals("")){
+          editor.statusError("Arch Not Found for "+BaseNoGui.getBoardPreferences().get("name"));
+          return;
+        }
+        target = BaseNoGui.getBoardPreferences().get("build.target");
+        if(target == null || target.contentEquals("")){
+          editor.statusError("Target Not Found for "+BaseNoGui.getBoardPreferences().get("name"));
+          return;
+        }
+      } catch(Exception e){
+        editor.statusError(e);
+        return;
+      }
     }
 
     TargetPlatform platform = BaseNoGui.getTargetPlatform();
+    String tc = tarch+"-"+target+"-elf";
 
-    String gccPath = PreferencesData.get("runtime.tools.xtensa-"+tc+"-elf-gcc.path");
+    String gccPath = PreferencesData.get("runtime.tools."+tc+"-gcc.path");
     if(gccPath == null){
-      gccPath = platform.getFolder() + "/tools/xtensa-"+tc+"-elf";
+      gccPath = platform.getFolder() + "/tools/"+tc;
     }
 
     String gdb;
     if(PreferencesData.get("runtime.os").contentEquals("windows"))
-      gdb = "xtensa-"+tc+"-elf-gdb.exe";
+      gdb = tc+"-gdb.exe";
     else
-      gdb = "xtensa-"+tc+"-elf-gdb";
+      gdb = tc+"-gdb";
 
     tool = new File(gccPath + "/bin", gdb);
     if (!tool.exists() || !tool.isFile()) {
@@ -422,7 +440,7 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
     }
 
     // Anything looking like an instruction address, dump!
-    Pattern p = Pattern.compile("40[0-2](\\d|[a-f]|[A-F]){5}\\b");
+    Pattern p = Pattern.compile("4[0-3](\\d|[a-f]|[A-F]){6}\\b");
     int count = 0;
     Matcher m = p.matcher(content);
     while(m.find()) {
@@ -486,11 +504,11 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
   // Scan and report the last failed memory allocation attempt, if present on the ESP8266
   private void parseAlloc() {
     String content = inputArea.getText();
-    Pattern p = Pattern.compile("last failed alloc call: 40[0-2](\\d|[a-f]|[A-F]){5}\\((\\d)+\\)");
+    Pattern p = Pattern.compile("last failed alloc call: 4[0-3](\\d|[a-f]|[A-F]){6}\\((\\d)+\\)");
     Matcher m = p.matcher(content);
     if (m.find()) {
       String fs = content.substring(m.start(), m.end());
-      Pattern p2 = Pattern.compile("40[0-2](\\d|[a-f]|[A-F]){5}\\b");
+      Pattern p2 = Pattern.compile("4[0-3](\\d|[a-f]|[A-F]){6}\\b");
       Matcher m2 = p2.matcher(fs);
       if (m2.find()) {
         String addr = fs.substring(m2.start(), m2.end());
