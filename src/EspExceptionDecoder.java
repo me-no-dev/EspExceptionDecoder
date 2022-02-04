@@ -269,13 +269,12 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
       try {
         tarch = BaseNoGui.getBoardPreferences().get("build.tarch");
         if(tarch == null || tarch.contentEquals("")){
-          editor.statusError("Arch Not Found for "+BaseNoGui.getBoardPreferences().get("name"));
-          return;
+          editor.statusError("Arch Not Found for '"+BaseNoGui.getBoardPreferences().get("name")+"'. Defaulting to 'xtensa'");
         }
         target = BaseNoGui.getBoardPreferences().get("build.target");
         if(target == null || target.contentEquals("")){
-          editor.statusError("Target Not Found for "+BaseNoGui.getBoardPreferences().get("name"));
-          return;
+          editor.statusError("Target Not Found for '"+BaseNoGui.getBoardPreferences().get("name")+"'. Defaulting to 'esp32'");
+          target = "esp32";
         }
       } catch(Exception e){
         editor.statusError(e);
