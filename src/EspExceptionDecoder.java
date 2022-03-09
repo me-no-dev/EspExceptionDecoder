@@ -149,14 +149,21 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
             while ((c = reader.read()) != -1)
                 System.err.print((char) c);
             reader.close();
-          } catch (Exception e){}
+          } catch (Exception e){
+            outputArea.setText("<html><font color=red><b>Run Exception:</b> "+e.getMessage()+"</font></html>");
+          }
         }
       };
       thread.start();
       int res = p.waitFor();
       thread.join();
+      // if(res != 0){
+      //   outputArea.setText("<html><font color=red>Decode Failed</font></html>");
+      // }
       return res;
-    } catch (Exception e){}
+    } catch (Exception e){
+      outputArea.setText("<html><font color=red><b>Decode Exception:</b> "+e.getMessage()+"</font></html>");
+    }
     return -1;
   }
 
@@ -166,7 +173,6 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
         try {
           if(listenOnProcess(arguments) != 0){
             editor.statusError("Decode Failed");
-            outputArea.setText("<html><font color=red>Decode Failed</font></html>");
           } else {
             editor.statusNotice("Decode Success");
             outputArea.setText(outputText);
