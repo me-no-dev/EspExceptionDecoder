@@ -97,6 +97,20 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
     return "ESP Exception Decoder";
   }
 
+  private void printLine(String line){
+    String s = prettyPrintGDBLine(line);
+    if (s != null) 
+      outputText += s +"\n";
+  }
+
+  private void printLogLine(String line, String color){
+    outputText += "<b><font color="+color+">"+line+"</font></b>\n";
+  }
+
+  private void printError(String line){
+    printLogLine(line, "red");
+  }
+
   // Original code from processing.app.helpers.ProcessUtils.exec()
   // Need custom version to redirect STDERR to STDOUT for GDB processing
   public static Process execRedirected(String[] command) throws IOException {
@@ -150,19 +164,19 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
                 System.err.print((char) c);
             reader.close();
           } catch (Exception e){
-            outputArea.setText("<html><font color=red><b>Run Exception:</b> "+e.getMessage()+"</font></html>");
+            printError("Run Exception: "+e.getMessage());
           }
         }
       };
       thread.start();
       int res = p.waitFor();
       thread.join();
-      // if(res != 0){
-      //   outputArea.setText("<html><font color=red>Decode Failed</font></html>");
-      // }
+      if(res != 0){
+        printError("Decode Failed");
+      }
       return res;
     } catch (Exception e){
-      outputArea.setText("<html><font color=red><b>Decode Exception:</b> "+e.getMessage()+"</font></html>");
+      printError("Decode Exception: "+e.getMessage());
     }
     return -1;
   }
@@ -175,12 +189,12 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
             editor.statusError("Decode Failed");
           } else {
             editor.statusNotice("Decode Success");
-            outputArea.setText(outputText);
           }
         } catch (Exception e){
           editor.statusError("Decode Exception");
-          outputArea.setText("<html><font color=red><b>Decode Exception:</b> "+e.getMessage()+"</font></html>");
+          printError("Decode Exception: "+e.getMessage());
         }
+        outputArea.setText(outputText);
       }
     };
     thread.start();
@@ -291,11 +305,8 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
 
     TargetPlatform platform = BaseNoGui.getTargetPlatform();
     String tc = tarch+"-"+target+"-elf";
-
-    String gccPath = PreferencesData.get("runtime.tools."+tc+"-gcc.path");
-    if(gccPath == null){
-      gccPath = platform.getFolder() + "/tools/"+tc;
-    }
+    String tcgdb = tarch+"-esp-elf-gdb";
+    String tools = platform.getFolder() + "/tools/";
 
     String gdb;
     if(PreferencesData.get("runtime.os").contentEquals("windows"))
@@ -303,7 +314,37 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
     else
       gdb = tc+"-gdb";
 
-    tool = new File(gccPath + "/bin", gdb);
+    // Search for GDB
+    // First check if the GDB package is installed locally (v2.0.8+)
+    tool = new File(tools + tcgdb + "/bin", gdb);
+    if (!tool.exists() || !tool.isFile()){
+      //System.err.println("tools/"+tcgdb+"/bin/"+gdb+" not found");
+      // Then check if the toolchain is installed locally
+      tool = new File(tools + tc + "/bin", gdb);
+      if (!tool.exists() || !tool.isFile()){
+        //System.err.println("tools/"+tc+"/bin/"+gdb+" not found");
+        // Then check if the GDB package is installed (v2.0.8+)
+        String gdbPath = PreferencesData.get("runtime.tools."+tcgdb+".path");
+        if(gdbPath == null || gdbPath.contentEquals("")){
+          //System.err.println("runtime.tools."+tcgdb+".path not found");
+          // Then check if the toolchain is installed
+          gdbPath = PreferencesData.get("runtime.tools."+tc+"-gcc.path");
+        }
+        if(gdbPath == null || gdbPath.contentEquals("")){
+          //System.err.println("runtime.tools."+tc+"-gcc.path not found");
+          // If still fails, offer the local toolchain folder
+          gdbPath = tools+tc;
+        }
+        System.err.println("gdbPath: "+gdbPath+"/bin/"+gdb);
+        tool = new File(gdbPath + "/bin", gdb);
+      } else {
+        System.err.println("gdbPath: "+tools+tc+"/bin/"+gdb);
+      }
+    } else {
+      System.err.println("gdbPath: "+tools+tcgdb+"/bin/"+gdb);
+    }
+    System.err.println();
+
     if (!tool.exists() || !tool.isFile()) {
       System.err.println();
       editor.statusError("ERROR: "+gdb+" not found!");
@@ -399,12 +440,6 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
     return html;
   }
 
-  private void printLine(String line){
-    String s = prettyPrintGDBLine(line);
-    if (s != null) 
-      outputText += s +"\n";
-  }
-
   public void run() {
     createAndUpload();
   }
@@ -469,6 +504,7 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
     }
     command[i++] = "-ex";
     command[i++] = "q";
+    System.out.println("\""+String.join("\" \"", command)+"\"");
     outputText += "\n<i>Decoding stack results</i>\n";
     sysExec(command);
   }
@@ -485,6 +521,7 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
     command[6] = "l *0x" + addr;
     command[7] = "-ex";
     command[8] = "q";
+    System.out.println("\""+String.join("\" \"", command)+"\"");
 
     try {
       final Process proc = execRedirected(command);
@@ -502,8 +539,10 @@ public class EspExceptionDecoder implements Tool, DocumentListener {
         }
       }
       reader.close();
-    } catch (Exception er) { }
-    // Something went wrong
+    } catch (Exception e) {
+      // Something went wrong
+      System.err.println("Function Decode Exception: "+e.getMessage());
+    }
     return null;
   }
 
